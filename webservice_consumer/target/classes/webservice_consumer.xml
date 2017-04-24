@@ -14,6 +14,13 @@ http://www.mulesoft.org/schema/mule/json http://www.mulesoft.org/schema/mule/jso
     <flow name="webservice_consumerFlow">
         <http:listener config-ref="HTTP_Listener_Configuration" path="/orders" allowedMethods="GET,POST" doc:name="HTTP"/>
         <logger message="#[message.payloadAs(java.lang.String)]" level="INFO" doc:name="Logger"/>
+        <dw:transform-message doc:name="Transform Message">
+            <dw:set-payload><![CDATA[%dw 1.0
+%output application/java
+---
+{
+}]]></dw:set-payload>
+        </dw:transform-message>
         <dw:transform-message doc:name="JSON to XML Transform Message">
             <dw:set-payload><![CDATA[%dw 1.0
 %output application/xml
