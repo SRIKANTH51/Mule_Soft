@@ -25,6 +25,7 @@ http://www.mulesoft.org/schema/mule/json http://www.mulesoft.org/schema/mule/jso
         </dw:transform-message>
         <ws:consumer config-ref="Web_Service_Consumer" operation="OrderTshirt" doc:name="Web Service Consumer"/>
         <json:xml-to-json-transformer doc:name="XML to JSON"/>
+        <logger message="#[payload]" level="INFO" doc:name="Logger"/>
         <logger message="#[message.payloadAs(java.lang.String)]" level="INFO" doc:name="Log the message"/>
     </flow>
 </mule>
