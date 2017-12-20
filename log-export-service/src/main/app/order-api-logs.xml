@@ -1,0 +1,161 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:ftp="http://www.mulesoft.org/schema/mule/ee/ftp" xmlns:tracking="http://www.mulesoft.org/schema/mule/ee/tracking" xmlns:objectstore="http://www.mulesoft.org/schema/mule/objectstore"
+	xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns:vm="http://www.mulesoft.org/schema/mule/vm"
+	xmlns:file="http://www.mulesoft.org/schema/mule/file"
+	xmlns:dw="http://www.mulesoft.org/schema/mule/ee/dw"
+	xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:spring="http://www.springframework.org/schema/beans" 
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://www.mulesoft.org/schema/mule/objectstore http://www.mulesoft.org/schema/mule/objectstore/current/mule-objectstore.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/vm http://www.mulesoft.org/schema/mule/vm/current/mule-vm.xsd
+http://www.mulesoft.org/schema/mule/file http://www.mulesoft.org/schema/mule/file/current/mule-file.xsd
+http://www.mulesoft.org/schema/mule/ee/dw http://www.mulesoft.org/schema/mule/ee/dw/current/dw.xsd
+http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-current.xsd
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/ee/tracking http://www.mulesoft.org/schema/mule/ee/tracking/current/mule-tracking-ee.xsd
+http://www.mulesoft.org/schema/mule/ee/ftp http://www.mulesoft.org/schema/mule/ee/ftp/current/mule-ftp-ee.xsd">
+
+
+<sub-flow name="orderApiLogs">
+     <set-variable variableName="endTime" value="#[server.dateTime.plusMinutes(-10)]" doc:name="EndTime"/>
+        <logger message="The endtime in order api logs is  #[flowVars.endTime] " level="INFO" doc:name="Logger"/>
+      <enricher target="#[sessionVars.objectExists]" doc:name="Message Enricher">
+            <objectstore:contains config-ref="ObjectStore__Connector" doc:name="ObjectStore" key="OrderLastRecordID"/>
+        </enricher>
+        <logger message="Does OrderLastRecordID key exists in the object store? #[sessionVars.objectExists]" level="INFO" doc:name="Logger"/>
+        <choice doc:name="Choice">
+            <when expression="sessionVars.objectExists != false">
+                <enricher target="#[sessionVars.lastRecordID]" doc:name="Message Enricher" >
+                    <objectstore:retrieve config-ref="ObjectStore__Connector"  doc:name="ObjectStore" defaultValue-ref="#[sessionVars.lowerId]" key="OrderLastRecordID"/>
+                </enricher>
+                <logger message="The order last record id from object store is #[sessionVars.lastRecordID]" level="INFO" doc:name="Logger"/>
+            </when>
+            <otherwise>
+                <logger message="There is no OrderLastRecordID in the object store" level="INFO" doc:name="Logger"/>
+            </otherwise>
+        </choice>
+        <dw:transform-message doc:name="Transform Message">
+            <dw:set-session-variable variableName="lowerIdw"><![CDATA[%dw 1.0
+%output application/java
+---
+{
+	lowerid:(sessionVars.lowerId) when sessionVars.lowerId != null otherwise 0
+}]]></dw:set-session-variable>
+        </dw:transform-message>
+        <set-session-variable variableName="lowerId" value="#[sessionVars.lowerIdw.lowerid]" doc:name="captureLowerRecordID"/>
+        <logger message="The order lower record id is #[sessionVars.lowerId]" level="INFO" doc:name="Logger"/>
+        <choice doc:name="Choice">
+            <when expression="sessionVars.lowerId != 0">
+                <dw:transform-message doc:name="Transform Message">
+                    <dw:set-payload><![CDATA[%dw 1.0
+%output application/json
+---
+{
+	
+	endTime:flowVars.endTime as :number ++ "000",
+	limit:"3000",
+	limitMsgLen:"3000",
+	lowerId:sessionVars.lowerId
+	
+}]]></dw:set-payload>
+                </dw:transform-message>
+            </when>
+            <otherwise>
+                <choice doc:name="Choice">
+                    <when expression="#[sessionVars.lastRecordID != null]">
+                        <dw:transform-message doc:name="Transform Message">
+                            <dw:set-payload><![CDATA[%dw 1.0
+%output application/json
+---
+{
+	//startTime:sessionVars.dateTimeCurrent,
+	endTime:flowVars.endTime as :number ++ "000",
+	limit:"3000",
+	limitMsgLen:"3000",
+	lowerId:sessionVars.lastRecordID
+}]]></dw:set-payload>
+                        </dw:transform-message>
+                    </when>
+                    <otherwise>
+                        <dw:transform-message doc:name="Transform Message">
+                            <dw:set-payload><![CDATA[%dw 1.0
+%output application/json
+---
+{
+	startTime: 1513007240000,
+	endTime:flowVars.endTime as :number ++ "000",
+	limit:"3000",
+	limitMsgLen:"3000"
+}]]></dw:set-payload>
+                        </dw:transform-message>
+                    </otherwise>
+                </choice>
+            </otherwise>
+        </choice>
+
+        <logger message="Request to logging API to pull order api logs is #[payload]" level="INFO" doc:name="Logger"/>
+        <http:request config-ref="HTTP_Request_Configuration" path="/cloudhub/api/v2/applications/${order-application-name}/logs" method="POST" doc:name="PullLogs">
+            <http:request-builder>
+                <http:header headerName="X-ANYPNT-ENV-ID" value="${environment-id}"/>
+                <http:header headerName="Content-Type" value="application/json"/>
+                <http:header headerName="Authorization" value="bearer #[flowVars.accessToken]"/>
+
+
+            </http:request-builder>
+        </http:request>
+        <dw:transform-message doc:name="Transform Message">
+            <dw:set-payload><![CDATA[%dw 1.0
+%output application/java
+---
+payload]]></dw:set-payload>
+        </dw:transform-message>
+
+        <choice doc:name="Choice">
+            <when expression="#[payload.size()&gt;0]">
+                <logger message="Payload exists in order logs flow" level="INFO" doc:name="Logger"/>
+                <enricher target="#[flowVars.ssoFTP]" doc:name="Message Enricher">
+                    <processor-chain doc:name="Processor Chain">
+                        <dw:transform-message doc:name="Transform Message">
+                            <dw:set-payload><![CDATA[%dw 1.0
+%output application/json
+---
+payload]]></dw:set-payload>
+                        </dw:transform-message>
+                        <logger message="Order logs to FTP connector #[payload] " level="INFO" doc:name="Logger"/>
+                        <ftp:outbound-endpoint host="${ftp.host}" port="${ftp.port}" path="${ftp.order.path}" user="${ftp.username}" password="${ftp.password}" outputPattern="#[&quot;order-api&quot;+server.dateTime.format('yyyyMMddHHmm')+&quot;.json&quot;]" responseTimeout="10000" doc:name="FTP"/>
+                    </processor-chain>
+                </enricher>
+                 <set-variable variableName="correctPayloadSize" value="#[payload.size()]" doc:name="payloadSize"/>
+                <set-variable variableName="payloadSize" value="#[payload.size()-1]" doc:name="checkingPayloadSize"/>
+                <logger message="Payload size in order logs flow #[flowVars.correctPayloadSize]" level="INFO" doc:name="Logger"/>
+                <dw:transform-message doc:name="Transform Message">
+                    <dw:set-payload><![CDATA[%dw 1.0
+%output application/java
+---
+payload[flowVars.payloadSize].recordId]]></dw:set-payload>
+                </dw:transform-message>
+                <set-session-variable variableName="lowerId" value="#[payload]" doc:name="updatingLowerRecordID"/>
+            </when>
+            <otherwise>
+                <logger message="Payload is empty in order logs flow" level="INFO" doc:name="Logger"/>
+            </otherwise>
+        </choice>
+        <logger message="The updated lower record id in order logs flow is --#[sessionVars.lowerId]" level="INFO" doc:name="Logger"/>
+        <choice doc:name="Choice">
+            <when expression="#[flowVars.correctPayloadSize&gt;0]">
+                <logger level="INFO" doc:name="Logger" message="Pushing order lower record id to VM"/>
+                <vm:outbound-endpoint exchange-pattern="one-way" path="Order" connector-ref="VM" doc:name="VM"/>
+            </when>
+            <otherwise>
+               <logger level="INFO" doc:name="Logger" message="There are no more records to process the flow and last record id to store in order object stoe is #[sessionVars.lowerId]"/>
+                <objectstore:store config-ref="ObjectStore__Connector" key="OrderLastRecordID" value-ref="#[sessionVars.lowerId]" doc:name="ObjectStore" overwrite="true"/>
+
+
+            </otherwise>
+        </choice>
+    </sub-flow>
+
+</mule>

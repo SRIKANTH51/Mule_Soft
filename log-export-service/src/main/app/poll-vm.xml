@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:tracking="http://www.mulesoft.org/schema/mule/ee/tracking" xmlns:vm="http://www.mulesoft.org/schema/mule/vm"
+	xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:spring="http://www.springframework.org/schema/beans" 
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://www.mulesoft.org/schema/mule/vm http://www.mulesoft.org/schema/mule/vm/current/mule-vm.xsd
+http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-current.xsd
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/ee/tracking http://www.mulesoft.org/schema/mule/ee/tracking/current/mule-tracking-ee.xsd">
+
+
+<flow name="pollCustomerVM">
+        <vm:inbound-endpoint exchange-pattern="one-way" path="Customer" connector-ref="VM" doc:name="VM"/>
+        <logger message="Data is pulled from customer VM" level="INFO" doc:name="Logger"/>
+        <flow-ref name="getAccessToken" doc:name="getAccessToken"/>
+        <flow-ref name="customerApiLogs" doc:name="customerApiLogs"/>
+    </flow>
+    
+    <flow name="pollOrderVM">
+        <vm:inbound-endpoint exchange-pattern="one-way" path="Order" connector-ref="VM" doc:name="VM"/>
+        <logger message="Data is pulled from order VM" level="INFO" doc:name="Logger"/>
+        <flow-ref name="getAccessToken" doc:name="getAccessToken"/>
+        <flow-ref name="orderApiLogs" doc:name="orderApiLogs"/>
+    </flow>
+    
+    <flow name="pollSsoVM">
+        <vm:inbound-endpoint exchange-pattern="one-way" path="SSO" connector-ref="VM" doc:name="VM"/>
+        <logger message="Data is pulled from sso VM" level="INFO" doc:name="Logger"/>
+        <flow-ref name="getAccessToken" doc:name="getAccessToken"/>
+        <flow-ref name="ssoApiLogs" doc:name="ssoApiLogs"/>
+    </flow>
+
+
+</mule>
